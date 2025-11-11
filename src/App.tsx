@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Process, Task } from './types';
-import ProcessCard from './components/ProcessCard';
+import ProcessCard from './components/ProcessCard.tsx';
 
 const initialTask: Omit<Task, 'id' | 'isComplete'> = {
   name: '',
