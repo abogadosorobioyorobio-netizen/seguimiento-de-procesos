@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { Process, Task } from '../types';
+import { Process, Task } from './types.ts';
 
 interface ProcessCardProps {
   process: Process;
@@ -32,7 +33,10 @@ const ProcessCard: React.FC<ProcessCardProps> = ({ process, onCompleteTask, onCl
   const isLastTask = process.currentTaskIndex === process.tasks.length - 1;
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-ES', {
+    if (!dateString) return 'N/A';
+    // Add 'T00:00:00' to handle dates without time part consistently
+    const date = new Date(dateString.includes('T') ? dateString : `${dateString}T00:00:00`);
+    return date.toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
