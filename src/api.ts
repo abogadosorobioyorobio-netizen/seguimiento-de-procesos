@@ -6,7 +6,7 @@ import { Process } from './types';
 // 1. Entra en https://jsonbin.io/
 // 2. Ve a la pestaña "API Keys" en el menú de la izquierda y copia tu "Master Key".
 // FIX: Explicitly type constants as string to prevent literal type inference error during comparison.
-const JSONBIN_API_KEY: string = 'TU_API_KEY_VA_AQUI'; 
+const JSONBIN_API_KEY: string = '10$eCcP5kw9x3H3ZhXxY/gPhu2WZvEtypB7gXGrUb9QOVajKlvhghVAi'; 
 
 // 3. Este es el ID del Bin que creaste.
 const JSONBIN_BIN_ID: string = '691327f743b1c97be9a6b72e';
