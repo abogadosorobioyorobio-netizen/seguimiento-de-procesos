@@ -1,7 +1,9 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Process, Task } from './types';
-import ProcessCard from './ProcessCard.tsx';
+import ProcessCard from './ProcessCard';
+import { fetchData, updateData } from './api';
+
+const CORRECT_PASSWORD = 'Orobio43210';
 
 const initialTask: Omit<Task, 'id' | 'isComplete'> = {
   name: '',
@@ -10,55 +12,139 @@ const initialTask: Omit<Task, 'id' | 'isComplete'> = {
   comments: ''
 };
 
+// Password Modal Component
+const PasswordModal = ({ onLogin }: { onLogin: (password: string) => void }) => {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === CORRECT_PASSWORD) {
+        onLogin(password);
+    } else {
+        setError(true);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-100 flex justify-center items-center">
+      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-sm">
+        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Acceso Protegido</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              Contraseña
+            </label>
+            <input
+              type="password"
+              id="password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError(false);
+              }}
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${error ? 'border-red-500' : 'border-gray-300'}`}
+              placeholder="Introduce la contraseña"
+              autoFocus
+            />
+            {error && <p className="text-red-500 text-xs mt-1">Contraseña incorrecta.</p>}
+          </div>
+          <button
+            type="submit"
+            className="w-full px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition-colors duration-200"
+          >
+            Entrar
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+
 // Main App Component
 const App: React.FC = () => {
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Data State
   const [processes, setProcesses] = useState<Process[]>([]);
+  const [taskOptions, setTaskOptions] = useState<string[]>([]);
+  const [assigneeOptions, setAssigneeOptions] = useState<string[]>([]);
+  
+  // UI State
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [editingProcess, setEditingProcess] = useState<Process | null>(null);
   const [isReportsOpen, setIsReportsOpen] = useState(false);
 
-  // Dynamic options for tasks and assignees
-  const [taskOptions, setTaskOptions] = useState<string[]>([]);
-  const [assigneeOptions, setAssigneeOptions] = useState<string[]>([]);
-
+  // Check session storage for authentication on component mount
   useEffect(() => {
     try {
-      const savedProcesses = localStorage.getItem('processes');
-      if (savedProcesses) {
-        setProcesses(JSON.parse(savedProcesses));
+      if (sessionStorage.getItem('isAuthenticated') === 'true') {
+        setIsAuthenticated(true);
+      } else {
+        setIsLoading(false); // Stop loading if not authenticated
       }
-      const savedTaskOptions = localStorage.getItem('taskOptions');
-      if (savedTaskOptions) {
-        setTaskOptions(JSON.parse(savedTaskOptions));
-      }
-      const savedAssigneeOptions = localStorage.getItem('assigneeOptions');
-      if (savedAssigneeOptions) {
-        setAssigneeOptions(JSON.parse(savedAssigneeOptions));
-      }
-    } catch (error) {
-      console.error("Error al cargar datos de localStorage", error);
+    } catch (e) {
+      console.error("No se pudo leer de sessionStorage", e);
+      setIsLoading(false);
     }
   }, []);
+  
+  // Cargar datos iniciales desde la base de datos central, solo si está autenticado
+  useEffect(() => {
+    if (!isAuthenticated) return;
 
-  const saveData = useCallback(<T,>(key: string, data: T) => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const remoteData = await fetchData();
+        setProcesses(remoteData.processes || []);
+        setTaskOptions(remoteData.taskOptions || []);
+        setAssigneeOptions(remoteData.assigneeOptions || []);
+        setError(null);
+      } catch (err: any) {
+        setError(err.message);
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, [isAuthenticated]);
+  
+  const handleLoginAttempt = () => {
     try {
-      localStorage.setItem(key, JSON.stringify(data));
-    } catch (error) {
-      console.error(`Error al guardar ${key} en localStorage`, error);
+      sessionStorage.setItem('isAuthenticated', 'true');
+    } catch(e) {
+      console.error("No se pudo escribir en sessionStorage", e);
     }
+    setIsAuthenticated(true);
+  };
+
+  // Función central para actualizar el estado local y remoto
+  const updateStateAndPersist = useCallback(async (newProcesses: Process[], newTaskOptions: string[], newAssigneeOptions: string[]) => {
+      // Actualización optimista de la UI para una respuesta rápida
+      setProcesses(newProcesses);
+      setTaskOptions(newTaskOptions);
+      setAssigneeOptions(newAssigneeOptions);
+
+      // Guardar en la base de datos central
+      try {
+        await updateData({
+          processes: newProcesses,
+          taskOptions: newTaskOptions,
+          assigneeOptions: newAssigneeOptions,
+        });
+      } catch (err) {
+          console.error("Error al guardar en la base de datos:", err);
+          alert("Error: No se pudieron guardar los cambios. Por favor, revisa tu conexión o la configuración de la API.");
+          // Aquí se podría implementar una lógica para revertir el cambio
+      }
   }, []);
 
-  useEffect(() => {
-    saveData('processes', processes);
-  }, [processes, saveData]);
-
-  useEffect(() => {
-    saveData('taskOptions', taskOptions);
-  }, [taskOptions, saveData]);
-
-  useEffect(() => {
-    saveData('assigneeOptions', assigneeOptions);
-  }, [assigneeOptions, saveData]);
 
   const handleOpenWizard = (processToEdit: Process | null = null) => {
     setEditingProcess(processToEdit);
@@ -73,19 +159,16 @@ const App: React.FC = () => {
   const handleSaveProcess = (processData: { name: string; tasks: Omit<Task, 'id' | 'isComplete'>[] }) => {
     const now = new Date().toISOString();
     
-    // Self-feeding logic for options
-    const newTaskOptions = new Set(taskOptions);
-    const newAssigneeOptions = new Set(assigneeOptions);
+    const updatedTaskOptionsSet = new Set(taskOptions);
+    const updatedAssigneeOptionsSet = new Set(assigneeOptions);
     processData.tasks.forEach(task => {
-        if (task.name) newTaskOptions.add(task.name);
-        if (task.assignee) newAssigneeOptions.add(task.assignee);
+        if (task.name) updatedTaskOptionsSet.add(task.name);
+        if (task.assignee) updatedAssigneeOptionsSet.add(task.assignee);
     });
-    setTaskOptions(Array.from(newTaskOptions));
-    setAssigneeOptions(Array.from(newAssigneeOptions));
 
+    let updatedProcesses;
     if (editingProcess) {
-      // Update existing process
-      setProcesses(processes.map(p =>
+      updatedProcesses = processes.map(p =>
         p.id === editingProcess.id
           ? {
             ...p,
@@ -99,13 +182,13 @@ const App: React.FC = () => {
               comments: t.comments,
               isComplete: p.tasks[index]?.isComplete || false,
             })),
-            status: 'Abierto', // Reopening always sets status to Abierto
+            status: 'Abierto',
             updatedAt: now,
+            closedAt: null, // Ensure reopened process doesn't stay closed
           }
           : p
-      ));
+      );
     } else {
-      // Create new process
       const newProcess: Process = {
         id: `proc-${Date.now()}`,
         name: processData.name,
@@ -119,41 +202,49 @@ const App: React.FC = () => {
         createdAt: now,
         updatedAt: now,
       };
-      setProcesses([...processes, newProcess]);
+      updatedProcesses = [...processes, newProcess];
     }
+    
+    updateStateAndPersist(updatedProcesses, Array.from(updatedTaskOptionsSet), Array.from(updatedAssigneeOptionsSet));
     handleCloseWizard();
   };
 
   const handleCompleteTask = (processId: string, taskIndex: number) => {
-    setProcesses(processes.map(p => {
+    const now = new Date().toISOString();
+    const updatedProcesses = processes.map(p => {
       if (p.id === processId) {
         const newTasks = [...p.tasks];
         newTasks[taskIndex].isComplete = true;
         const isLastTask = taskIndex === p.tasks.length - 1;
-        const now = new Date().toISOString();
 
         return {
           ...p,
           tasks: newTasks,
           currentTaskIndex: isLastTask ? p.currentTaskIndex : p.currentTaskIndex + 1,
-          status: isLastTask ? 'Cerrado' : p.status,
+          status: isLastTask ? 'Cerrado' as const : p.status,
           updatedAt: now,
           closedAt: isLastTask ? now : p.closedAt,
         };
       }
       return p;
-    }));
+    });
+
+    updateStateAndPersist(updatedProcesses, taskOptions, assigneeOptions);
   };
 
   const handleCloseProcess = (processId: string) => {
       const now = new Date().toISOString();
-      setProcesses(processes.map(p => p.id === processId ? {...p, status: 'Cerrado', updatedAt: now, closedAt: now } : p));
+      const updatedProcesses = processes.map(p => p.id === processId ? {...p, status: 'Cerrado' as const, updatedAt: now, closedAt: now } : p);
+      updateStateAndPersist(updatedProcesses, taskOptions, assigneeOptions);
   };
   
   const handleReopenProcess = (processToReopen: Process) => {
       handleOpenWizard(processToReopen);
   };
-
+  
+  if (!isAuthenticated) {
+    return <PasswordModal onLogin={handleLoginAttempt} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
@@ -177,7 +268,19 @@ const App: React.FC = () => {
         </div>
       </header>
       <main className="container mx-auto px-6 py-8">
-        {processes.length > 0 ? (
+        {isLoading && (
+          <div className="text-center py-16 px-6">
+            <h2 className="text-2xl font-semibold text-gray-700">Cargando datos desde la nube...</h2>
+          </div>
+        )}
+        {error && (
+            <div className="text-center py-16 px-6 bg-red-100 text-red-800 rounded-lg shadow-md">
+                <h2 className="text-2xl font-semibold mb-2">Error de Conexión</h2>
+                <p>{error}</p>
+                <p className="mt-2 text-sm">Por favor, revisa el archivo <strong>src/api.ts</strong> y asegúrate de que tu API Key y Bin ID son correctos.</p>
+            </div>
+        )}
+        {!isLoading && !error && processes.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {processes.map(proc => (
               <ProcessCard
@@ -190,10 +293,12 @@ const App: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="text-center py-16 px-6 bg-white rounded-lg shadow-md">
-            <h2 className="text-2xl font-semibold text-gray-700 mb-2">No hay procesos todavía.</h2>
-            <p className="text-gray-500">¡Crea tu primer proceso para empezar a darle seguimiento!</p>
-          </div>
+          !isLoading && !error && (
+            <div className="text-center py-16 px-6 bg-white rounded-lg shadow-md">
+              <h2 className="text-2xl font-semibold text-gray-700 mb-2">No hay procesos todavía.</h2>
+              <p className="text-gray-500">¡Crea tu primer proceso para empezar a darle seguimiento!</p>
+            </div>
+          )
         )}
       </main>
       {isWizardOpen && (
