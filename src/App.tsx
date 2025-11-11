@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Process, Task } from './types';
-import ProcessCard from './ProcessCard';
-import { fetchData, updateData } from './api';
+import { Process, Task } from './types.ts';
+import ProcessCard from './ProcessCard.tsx';
+import { fetchData, updateData } from './api.ts';
 
 const CORRECT_PASSWORD = 'Orobio43210';
 
